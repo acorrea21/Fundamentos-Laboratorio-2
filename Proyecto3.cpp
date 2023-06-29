@@ -14,21 +14,20 @@
 
 #include <iostream>
 
+class ProjectionManager;
 void redimensionarVentana(GLFWwindow *, int, int);
-void teclaPresionada(GLFWwindow* window)
-{
-   if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
-        glfwSetWindowShouldClose(window, true);
-
-	 if (glfwGetKey(window, GLFW_KEY_0) == GLFW_PRESS){
-     std::cout << "Tecla 0 Presioanda\n";
-   }
-}
-
+void Input(GLFWwindow*, ProjectionManager*);
 
 // settings
 const unsigned int SCR_WIDTH = 800;
 const unsigned int SCR_HEIGHT = 600;
+//VALOR DE MOVIMIENTO
+const float mValue = 0.01f;
+//VALOR DE ROTACION
+const float rValue = 0.01f;
+//VALOR DE ESCALA
+const float sValue = 0.01f;
+
 
 const char *vertexShaderSource = 
     "#version 330 core\n"
@@ -38,9 +37,10 @@ const char *vertexShaderSource =
     "uniform mat4 model;\n"
     "uniform mat4 view;\n"
     "uniform mat4 projection;\n"
+    "uniform float scale;\n"
     "void main()\n"
     "{\n"
-    "   gl_Position = projection * view * model * vec4(aPos, 1.0f);\n"
+    "   gl_Position = projection * view * model * vec4(aPos.x * scale, aPos.y * scale, aPos.z * scale, 1.0f);\n"
     "   TexCoord = vec2(aTexCoord.x, aTexCoord.y);\n"
     "}\n\0";
  
@@ -55,6 +55,85 @@ const char *fragmentShaderSource = "#version 330 core\n"
 
 /////
 GLuint transformLoc;
+
+
+class Utilities
+{
+  public:
+  //Shorcut
+  static void Rotate(glm::mat4* model,float angle, float x, float y, float z)
+  {
+    *model = glm::rotate(*model, angle, glm::vec3( x, y, z));
+  };
+  //Shorcut
+  static void Translate(glm::mat4* view, float x, float y, float z)
+  {
+    *view = glm::translate(*view, glm::vec3(x, y, z));
+  }
+  static float Clamp(float value, float minInclusive, float maxInclusive)
+  {
+    if(value < minInclusive)
+    {
+      return minInclusive;
+    }
+
+    if(value > maxInclusive)
+    {
+      return maxInclusive;
+    }
+
+    return value;
+  }
+};
+
+class ProjectionManager
+{
+  private:
+  glm::mat4 projection;
+  glm::mat4 translate;
+  glm::mat4 rotation;
+  float scale;
+
+  public:
+  ProjectionManager(float fov, float aspectRatio, float nearClip, float farClip)
+  {
+    projection = glm::perspective(fov,aspectRatio,nearClip,farClip);
+    rotation = glm::mat4(1.0f);
+    translate = glm::mat4(1.0f);
+    Utilities::Translate(&translate,0.0f, 0.0f, -3.0f);
+    scale = 1.0f;
+  }
+  void Translate(float x, float y, float z)
+  {
+    Utilities::Translate(&translate,x,y,z);
+  }
+  void Rotate(float angle, float x, float y, float z)
+  {
+    Utilities::Rotate(&rotation,angle,x,y,z);
+  }
+  void Scale(float value)
+  {
+    scale +=value;
+    scale = Utilities::Clamp(scale, 0.4f, 3.0f);
+  }
+
+  glm::mat4 GetProjection() const 
+  {
+    return projection;
+  }
+  glm::mat4 GetTranslate() const 
+  {
+    return translate;
+  }
+  glm::mat4 GetRotation() const 
+  {
+    return rotation;
+  }
+  float GetScale() const 
+  {
+    return scale;
+  }
+};
 
 int main(){
     // glfw: initialize and configure
@@ -253,7 +332,9 @@ int main(){
 
     ////////////GLM
     glm::mat4 projection;
-    projection = glm::perspective( 45.0f, ( GLfloat )screenWidth / ( GLfloat )screenHeight, 0.1f, 100.0f );
+
+    ProjectionManager pManager(45.0f, (GLfloat)screenWidth / (GLfloat)screenHeight, 0.1f, 100.0f );
+
     ////////////
 
     transformLoc = glGetUniformLocation(shaderProgram, "transform");
@@ -261,7 +342,8 @@ int main(){
     // render loop
     while (!glfwWindowShouldClose(window)){
         glfwPollEvents();
-        teclaPresionada(window);
+
+        Input(window, &pManager);
         
 
         // render
@@ -277,23 +359,23 @@ int main(){
 
         glUseProgram(shaderProgram);
        
-        /////////////////////////////
-        glm::mat4 model = glm::mat4( 1.0f );
-        glm::mat4 view = glm::mat4( 1.0f );
-        model = glm::rotate( model, ( GLfloat)glfwGetTime( ) * 1.0f, glm::vec3( 0.5f, 1.0f, 0.0f ) ); // use with perspective projection
 
-        view = glm::translate( view, glm::vec3( 0.0f, 0.0f, -3.0f ) ); // use with perspective projection
+        //model = glm::rotate( model, ( GLfloat)glfwGetTime( ) * 1.0f, glm::vec3( 0.5f, 1.0f, 0.0f ) ); // use with perspective projection
+
+        //view = glm::translate( view, glm::vec3( 0.0f, 0.0f, -3.0f ) ); // use with perspective projection
         
         // Get their uniform location
         GLint modelLoc = glGetUniformLocation(shaderProgram, "model" );
         GLint viewLoc = glGetUniformLocation(shaderProgram, "view" );
         GLint projLoc = glGetUniformLocation(shaderProgram, "projection" );
+        GLint scaleLoc = glGetUniformLocation(shaderProgram, "scale" );
 
         // Pass them to the shaders
-        glUniformMatrix4fv( modelLoc, 1, GL_FALSE, glm::value_ptr( model ) );
-        glUniformMatrix4fv( viewLoc, 1, GL_FALSE, glm::value_ptr( view ) );
-        glUniformMatrix4fv( projLoc, 1, GL_FALSE, glm::value_ptr( projection ) );
-        
+        glUniformMatrix4fv( modelLoc, 1, GL_FALSE, glm::value_ptr(pManager.GetRotation()));
+        glUniformMatrix4fv( viewLoc, 1, GL_FALSE, glm::value_ptr(pManager.GetTranslate()));
+        glUniformMatrix4fv( projLoc, 1, GL_FALSE, glm::value_ptr(pManager.GetProjection()));
+        glUniform1f(scaleLoc, pManager.GetScale());
+
         // Draw container
         glBindVertexArray( VAO );
         glDrawArrays( GL_TRIANGLES, 0, 36 );
@@ -314,6 +396,55 @@ int main(){
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
-void redimensionarVentana(GLFWwindow* window, int width, int height){
-    glViewport(0, 0, width, height);
+void redimensionarVentana(GLFWwindow* window, int width, int height)
+{
+    glad_glViewport(0, 0, width, height);
+}
+
+void Input(GLFWwindow* window, ProjectionManager* manager)
+{
+  
+  //Caso salir de la pantalla
+  if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
+  glfwSetWindowShouldClose(window, true);
+
+  //Movimiento (PD: Desde nuestra perspectiva)
+  //EJE X
+	if (glfwGetKey(window, GLFW_KEY_Z) == GLFW_PRESS)
+    manager->Translate(-mValue,0,0);
+  if (glfwGetKey(window, GLFW_KEY_X) == GLFW_PRESS)
+    manager->Translate(mValue,0,0);
+  //EJE Y
+  if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
+    manager->Translate(0,-mValue,0);
+  if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
+    manager->Translate(0,mValue,0);
+  //EJE Z
+  if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+    manager->Translate(0,0,-mValue);
+  if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
+    manager->Translate(0,0,mValue);
+
+  //Rotacion (PD: Desde nuestra perspectiva)
+  //EJE X
+  if (glfwGetKey(window, GLFW_KEY_N) == GLFW_PRESS)
+    manager->Rotate(rValue,1.0f,0,0);
+  if (glfwGetKey(window, GLFW_KEY_M) == GLFW_PRESS)
+    manager->Rotate(-rValue,1.0f,0,0);
+  //EJE Y
+  if (glfwGetKey(window, GLFW_KEY_J) == GLFW_PRESS)
+    manager->Rotate(rValue,0,1.0f,0);
+  if (glfwGetKey(window, GLFW_KEY_K) == GLFW_PRESS)
+    manager->Rotate(-rValue,0,1.0f,0);
+  //EJE Z
+  if (glfwGetKey(window, GLFW_KEY_U) == GLFW_PRESS)
+    manager->Rotate(rValue,0,0,1.0f);
+  if (glfwGetKey(window, GLFW_KEY_I) == GLFW_PRESS)
+    manager->Rotate(-rValue,0,0,1.0f);
+
+  //Escala
+  if (glfwGetKey(window, GLFW_KEY_O) == GLFW_PRESS)
+    manager->Scale(sValue);
+  if (glfwGetKey(window, GLFW_KEY_P) == GLFW_PRESS)
+    manager->Scale(-sValue);
 }
