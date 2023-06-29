@@ -267,7 +267,7 @@ int main(){
     número de canales de color de la imagen resultante.
     */
     int ancho, alto, canales;
-    unsigned char *img = stbi_load("./imagenes/wall.jpg", &ancho, &alto, &canales, 0);
+    unsigned char *img = stbi_load("./imagenes/Kibo.jpg", &ancho, &alto, &canales, 0);
 
 
     ///Textura
